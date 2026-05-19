@@ -1,0 +1,225 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: {{ .Values.workflowTemplateName }}
+  namespace: {{ .Values.experimentsNamespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/part-of: ppo-training
+spec:
+  serviceAccountName: {{ .Values.serviceAccountName }}
+  entrypoint: main
+  arguments:
+    parameters:
+      - name: worker-image-tag
+        value: {{ .Values.images.worker.tag | quote }}
+      - name: trainer-image-tag
+        value: {{ .Values.images.trainer.tag | quote }}
+      - name: mlflow-tracking-uri
+        value: {{ .Values.mlflow.trackingUri | quote }}
+      - name: experiment-name
+        value: {{ .Values.mlflow.experimentName | quote }}
+      # Trainer knobs (consumed by /project/launch-trainer.sh)
+      - name: batch-size
+        value: {{ .Values.ppo.trainer.batchSize | quote }}
+      - name: run-timeout-seconds
+        value: {{ .Values.ppo.trainer.runTimeoutSeconds | quote }}
+      # Worker knobs (consumed by /project/launch-cabalsh.sh)
+      - name: agent-limit
+        value: {{ .Values.ppo.worker.agentLimit | quote }}
+      - name: resume-mlflow-run-id
+        value: {{ .Values.ppo.worker.resumeMlflowRunId | quote }}
+      - name: resume-mlflow-alias
+        value: {{ .Values.ppo.worker.resumeMlflowAlias | quote }}
+      - name: max-recorded-steps-per-iter
+        value: {{ .Values.ppo.worker.maxRecordedStepsPerIter | quote }}
+      - name: max-recorded-episodes-per-iter
+        value: {{ .Values.ppo.worker.maxRecordedEpisodesPerIter | quote }}
+      - name: iterations-per-gather
+        value: {{ .Values.ppo.worker.iterationsPerGather | quote }}
+      - name: critic-warmup-iterations
+        value: {{ .Values.ppo.worker.criticWarmupIterations | quote }}
+      - name: policy-batch-size
+        value: {{ .Values.ppo.worker.policyBatchSize | quote }}
+      - name: critic-batch-size
+        value: {{ .Values.ppo.worker.criticBatchSize | quote }}
+  templates:
+    - name: main
+      dag:
+        tasks:
+          # Trainer is a daemon: Argo treats it as "complete" for dependency
+          # purposes as soon as its pod has an IP, so the worker starts right
+          # after the trainer is reachable and runs concurrently with it.
+          - name: trainer
+            template: trainer
+            arguments:
+              parameters:
+                - name: image-tag
+                  value: "{{`{{workflow.parameters.trainer-image-tag}}`}}"
+                - name: mlflow-tracking-uri
+                  value: "{{`{{workflow.parameters.mlflow-tracking-uri}}`}}"
+                - name: experiment-name
+                  value: "{{`{{workflow.parameters.experiment-name}}`}}"
+                - name: batch-size
+                  value: "{{`{{workflow.parameters.batch-size}}`}}"
+                - name: run-timeout-seconds
+                  value: "{{`{{workflow.parameters.run-timeout-seconds}}`}}"
+          # batch-size doubles as the worker fan-out factor: Argo expands
+          # this task into N identical pods (named ...-worker-<n>-<id>) all
+          # pointing at the same trainer daemon, so a single experiment has
+          # one trainer + N parallel rollout workers.
+          - name: worker
+            template: worker
+            dependencies: [trainer]
+            withSequence:
+              count: "{{`{{workflow.parameters.batch-size}}`}}"
+            arguments:
+              parameters:
+                - name: image-tag
+                  value: "{{`{{workflow.parameters.worker-image-tag}}`}}"
+                - name: mlflow-tracking-uri
+                  value: "{{`{{workflow.parameters.mlflow-tracking-uri}}`}}"
+                - name: experiment-name
+                  value: "{{`{{workflow.parameters.experiment-name}}`}}"
+                # Pass the live trainer pod IP to the worker — Argo populates
+                # tasks.<name>.ip with the daemon pod's IP once it's running.
+                - name: trainer-ip
+                  value: "{{`{{tasks.trainer.ip}}`}}"
+                - name: agent-limit
+                  value: "{{`{{workflow.parameters.agent-limit}}`}}"
+                - name: resume-mlflow-run-id
+                  value: "{{`{{workflow.parameters.resume-mlflow-run-id}}`}}"
+                - name: resume-mlflow-alias
+                  value: "{{`{{workflow.parameters.resume-mlflow-alias}}`}}"
+                - name: max-recorded-steps-per-iter
+                  value: "{{`{{workflow.parameters.max-recorded-steps-per-iter}}`}}"
+                - name: max-recorded-episodes-per-iter
+                  value: "{{`{{workflow.parameters.max-recorded-episodes-per-iter}}`}}"
+                - name: iterations-per-gather
+                  value: "{{`{{workflow.parameters.iterations-per-gather}}`}}"
+                - name: critic-warmup-iterations
+                  value: "{{`{{workflow.parameters.critic-warmup-iterations}}`}}"
+                - name: policy-batch-size
+                  value: "{{`{{workflow.parameters.policy-batch-size}}`}}"
+                - name: critic-batch-size
+                  value: "{{`{{workflow.parameters.critic-batch-size}}`}}"
+
+    - name: trainer
+      inputs:
+        parameters:
+          - name: image-tag
+          - name: mlflow-tracking-uri
+          - name: experiment-name
+          - name: batch-size
+          - name: run-timeout-seconds
+      # Tolerate the GPU node taint applied by environments that segregate
+      # GPU workloads (kind local, GKE/EKS GPU pools all use the same
+      # `nvidia.com/gpu=present:NoSchedule` taint).
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Equal
+          value: present
+          effect: NoSchedule
+      # Daemon: pod stays running while sibling DAG tasks execute; killed when
+      # the DAG that owns it completes. The worker is the only thing that
+      # talks to this trainer and addresses it by IP via CABAL_TRAINER_IP, so
+      # no Service or shared selector is needed for per-run coupling.
+      daemon: true
+      container:
+        image: "{{ .Values.images.trainer.repository }}:{{`{{inputs.parameters.image-tag}}`}}"
+        imagePullPolicy: {{ .Values.images.trainer.pullPolicy }}
+        command:
+{{ toYaml .Values.images.trainer.command | indent 10 }}
+        args:
+{{ toYaml .Values.images.trainer.args | indent 10 }}
+        env:
+          - name: MLFLOW_TRACKING_URI
+            value: "{{`{{inputs.parameters.mlflow-tracking-uri}}`}}"
+          - name: MLFLOW_EXPERIMENT_NAME
+            value: "{{`{{inputs.parameters.experiment-name}}`}}"
+          - name: BATCH_SIZE
+            value: "{{`{{inputs.parameters.batch-size}}`}}"
+          - name: RUN_TIMEOUT_SECONDS
+            value: "{{`{{inputs.parameters.run-timeout-seconds}}`}}"
+        resources:
+          requests:
+{{ toYaml .Values.resources.trainer.requests | indent 12 }}
+          limits:
+{{ toYaml .Values.resources.trainer.limits | indent 12 }}
+
+    - name: worker
+      inputs:
+        parameters:
+          - name: image-tag
+          - name: mlflow-tracking-uri
+          - name: experiment-name
+          - name: trainer-ip
+          - name: agent-limit
+          - name: resume-mlflow-run-id
+          - name: resume-mlflow-alias
+          - name: max-recorded-steps-per-iter
+          - name: max-recorded-episodes-per-iter
+          - name: iterations-per-gather
+          - name: critic-warmup-iterations
+          - name: policy-batch-size
+          - name: critic-batch-size
+      # The Unreal Engine Linux Shipping binary inside the worker image
+      # refuses to start as root. Run as the ue4 user (UID/GID 1000)
+      # baked into the image's /etc/passwd.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      container:
+        image: "{{ .Values.images.worker.repository }}:{{`{{inputs.parameters.image-tag}}`}}"
+        imagePullPolicy: {{ .Values.images.worker.pullPolicy }}
+        command:
+{{ toYaml .Values.images.worker.command | indent 10 }}
+        args:
+{{ toYaml .Values.images.worker.args | indent 10 }}
+        env:
+          - name: MLFLOW_TRACKING_URI
+            value: "{{`{{inputs.parameters.mlflow-tracking-uri}}`}}"
+          - name: MLFLOW_EXPERIMENT_NAME
+            value: "{{`{{inputs.parameters.experiment-name}}`}}"
+          # launch-cabalsh.sh reads TASK_NAME for the MLflow experiment, so
+          # export the same value under both names. Keep until the script is
+          # updated to read MLFLOW_EXPERIMENT_NAME directly.
+          - name: TASK_NAME
+            value: "{{`{{inputs.parameters.experiment-name}}`}}"
+          - name: CABAL_TRAINER_IP
+            value: "{{`{{inputs.parameters.trainer-ip}}`}}"
+          - name: AGENT_LIMIT
+            value: "{{`{{inputs.parameters.agent-limit}}`}}"
+          - name: RESUME_MLFLOW_RUN_ID
+            value: "{{`{{inputs.parameters.resume-mlflow-run-id}}`}}"
+          - name: RESUME_MLFLOW_ALIAS
+            value: "{{`{{inputs.parameters.resume-mlflow-alias}}`}}"
+          - name: MAX_RECORDED_STEPS_PER_ITER
+            value: "{{`{{inputs.parameters.max-recorded-steps-per-iter}}`}}"
+          - name: MAX_RECORDED_EPISODES_PER_ITER
+            value: "{{`{{inputs.parameters.max-recorded-episodes-per-iter}}`}}"
+          - name: ITERATIONS_PER_GATHER
+            value: "{{`{{inputs.parameters.iterations-per-gather}}`}}"
+          - name: CRITIC_WARMUP_ITERATIONS
+            value: "{{`{{inputs.parameters.critic-warmup-iterations}}`}}"
+          - name: POLICY_BATCH_SIZE
+            value: "{{`{{inputs.parameters.policy-batch-size}}`}}"
+          - name: CRITIC_BATCH_SIZE
+            value: "{{`{{inputs.parameters.critic-batch-size}}`}}"
+        # The Unreal binary writes runtime state under /project/Saved, but
+        # /project itself is owned by root in the image and ue4 (UID 1000)
+        # has no write access there. An emptyDir mounted at /project/Saved
+        # is fsGroup-chowned to 1000 by the pod's securityContext, giving
+        # the binary a writable scratch dir without touching the image.
+        volumeMounts:
+          - name: project-saved
+            mountPath: /project/Saved
+        resources:
+          requests:
+{{ toYaml .Values.resources.worker.requests | indent 12 }}
+          limits:
+{{ toYaml .Values.resources.worker.limits | indent 12 }}
+      volumes:
+        - name: project-saved
+          emptyDir: {}
