@@ -1,0 +1,49 @@
+# ServiceAccount + RBAC the trigger/cancel webhook authenticates as.
+# A short-lived token (`kubectl create token ppo-trigger --duration=1h`) is
+# the standard way to mint credentials for it; CI runners can also use
+# OIDC federation against this same SA.
+#
+# Granted verbs:
+#   create        — POST a Workflow CR to start a new run
+#   get/list/watch — inspect run status / poll completion
+#   patch/update  — set `spec.shutdown=Terminate` (or `Stop`) to cancel
+#                   a running workflow
+#   delete        — hard-cancel by deleting the Workflow CR outright
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ppo-trigger
+  namespace: {{ .Values.experimentsNamespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/part-of: ppo-training
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ppo-trigger
+  namespace: {{ .Values.experimentsNamespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/part-of: ppo-training
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows", "workflowtemplates"]
+    verbs: ["create", "get", "list", "watch", "patch", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ppo-trigger
+  namespace: {{ .Values.experimentsNamespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/part-of: ppo-training
+subjects:
+  - kind: ServiceAccount
+    name: ppo-trigger
+    namespace: {{ .Values.experimentsNamespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ppo-trigger

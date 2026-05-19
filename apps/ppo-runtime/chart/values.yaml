@@ -1,0 +1,100 @@
+# Where this chart's resources land:
+#   controlPlaneNamespace — namespace the chart's Argo CD Application syncs into
+#                           (must match the kubeflow-pipelines install ns).
+#                           Currently nothing in this chart targets it; kept as
+#                           a knob in case future control-plane-adjacent
+#                           resources are added.
+#   experimentsNamespace  — namespace the WorkflowTemplate, ppo-trigger SA +
+#                           RBAC, mlflow shim Service, and every submitted
+#                           Workflow run live in. The cluster-wide workflow-
+#                           controller (see base repo's kubeflow-pipelines
+#                           Application) is granted RBAC here via the base
+#                           repo's experiments-workflow-controller-rbac.yaml.
+controlPlaneNamespace: kubeflow
+experimentsNamespace: experiments
+
+# Name of the WorkflowTemplate. trigger.py creates a Workflow that references
+# this name.
+workflowTemplateName: ppo-training
+
+# Per-run isolation note: the worker receives the trainer pod IP via
+# CABAL_TRAINER_IP (sourced from `{{tasks.trainer.ip}}` of its own Workflow),
+# so there is no shared Service or hostname that could cross-pollinate
+# concurrent runs. Each Workflow produces its own trainer+worker pair tied
+# strictly to the Workflow that created them.
+
+images:
+  worker:
+    repository: agi-rl-rl-worker
+    # Default tag is overridden at run time by trigger.py via Workflow parameters.
+    tag: latest
+    pullPolicy: IfNotPresent
+    # Argo's emissary executor refuses to start a container without an explicit
+    # command — it tries to fetch it from the registry, which fails for images
+    # built locally. List the image's CMD here verbatim.
+    command: ["bash"]
+    args: ["/project/launch-cabalsh.sh"]
+  trainer:
+    repository: agi-rl-rl-trainer
+    tag: latest
+    pullPolicy: IfNotPresent
+    command: ["bash"]
+    args: ["/project/launch-trainer.sh"]
+
+mlflow:
+  trackingUri: http://mlflow.mlflow.svc.cluster.local:5000
+  experimentName: ppo-default
+
+# Per-run PPO knobs. Each becomes a Workflow parameter so a webhook payload
+# can override it; the values here are the cluster-wide defaults.
+#
+# Empty string means "use the launch script's internal default" (the script
+# reads "${VAR:-<default>}" so we'd otherwise pin the value to the empty
+# string, which is rarely what you want). Pass a non-empty value here to
+# pin a cluster default, or pass it in the webhook payload to override
+# per run.
+ppo:
+  trainer:
+    # Number of worker pods spawned in parallel against the single trainer.
+    # Also exported to the trainer as BATCH_SIZE (consumed by
+    # /project/launch-trainer.sh) so it knows how many workers to expect.
+    # Override per run with `--param batch-size=N` on trigger.sh.
+    batchSize: "1"
+    # RUN_TIMEOUT_SECONDS consumed by /project/launch-trainer.sh
+    runTimeoutSeconds: "14400"
+  worker:
+    # AGENT_LIMIT consumed by /project/launch-cabalsh.sh
+    agentLimit: "8"
+    # Resume from a prior MLflow run instead of starting fresh; both empty
+    # by default = no resume.
+    resumeMlflowRunId: ""
+    resumeMlflowAlias: "latest"
+    # PPO/recording knobs — empty means "use the launch script's default".
+    maxRecordedStepsPerIter: ""
+    maxRecordedEpisodesPerIter: ""
+    iterationsPerGather: ""
+    criticWarmupIterations: ""
+    policyBatchSize: ""
+    criticBatchSize: ""
+
+resources:
+  worker:
+    requests:
+      cpu: "500m"
+      memory: 1Gi
+    # No limits: workers run to completion and we'd rather have them burst
+    # CPU/mem freely than get throttled or OOM-killed mid-rollout.
+    limits: {}
+  trainer:
+    requests:
+      cpu: "1"
+      memory: 4Gi
+      nvidia.com/gpu: 1
+    # No CPU/memory limits — trainer can burst freely. The nvidia.com/gpu
+    # limit stays because K8s rejects pods that request a non-overcommittable
+    # resource without a matching limit.
+    limits:
+      nvidia.com/gpu: 1
+
+# Service account the worker and trainer pods run as.
+serviceAccountName: default

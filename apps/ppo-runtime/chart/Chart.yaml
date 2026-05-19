@@ -1,0 +1,10 @@
+apiVersion: v2
+name: ppo-runtime
+description: |
+  PPO RL training runtime: an Argo Workflows WorkflowTemplate that launches
+  the trainer (as a daemon, requesting nvidia.com/gpu) and the worker in
+  parallel, plus the headless Service named `rl-trainer` the worker resolves
+  to reach the live trainer pod.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
