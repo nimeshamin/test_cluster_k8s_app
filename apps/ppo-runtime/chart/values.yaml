@@ -45,6 +45,25 @@ mlflow:
   trackingUri: http://mlflow.mlflow.svc.cluster.local:5000
   experimentName: ppo-default
 
+# KubeRay-backed shmem comms mode. When enabled, the trainer connects to the
+# long-lived RayCluster (head Service in the experiments namespace) as a Ray
+# driver and exchanges policy + experience through per-node rl-bridge
+# DaemonSet pods via /dev/shm — see test_cluster_k8s_base/apps/rl-bridge for
+# the cluster-side topology. When disabled, the original socket transport
+# between the worker and the trainer pod's IP (CABAL_TRAINER_IP /
+# tasks.trainer.ip) is used unchanged.
+kuberay:
+  enabled: false
+  # Long-lived RayCluster head Service. Matches the rl-bridge App in the
+  # base repo.
+  rayAddress: rl-head-head-svc.experiments.svc.cluster.local:6379
+  rayNamespace: rl-bridge
+  # Worker -> bridge announce socket. The DaemonSet creates the socket on
+  # this hostPath; worker pods mount the same hostPath so launch-cabalsh.sh
+  # can connect and register before exec'ing the UE binary.
+  bridgeUds: /var/run/rl-bridge/control.sock
+  bridgeStateDir: /var/run/rl-bridge
+
 # Per-run PPO knobs. Each becomes a Workflow parameter so a webhook payload
 # can override it; the values here are the cluster-wide defaults.
 #
