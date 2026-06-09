@@ -141,6 +141,17 @@ spec:
             value: "{{`{{inputs.parameters.batch-size}}`}}"
           - name: RUN_TIMEOUT_SECONDS
             value: "{{`{{inputs.parameters.run-timeout-seconds}}`}}"
+          {{- if .Values.kuberay.enabled }}
+          # KubeRay mode: cabal-cli's trainer.py reads KUBERAY_MODE and swaps
+          # UE's train.py for /project/Plugins/KubeRay/Python/kuberay_train.py,
+          # which connects to the long-lived RayCluster as a driver.
+          - name: KUBERAY_MODE
+            value: "1"
+          - name: RAY_ADDRESS
+            value: {{ .Values.kuberay.rayAddress | quote }}
+          - name: BRIDGE_RAY_NAMESPACE
+            value: {{ .Values.kuberay.rayNamespace | quote }}
+          {{- end }}
         resources:
           requests:
 {{ toYaml .Values.resources.trainer.requests | indent 12 }}
@@ -207,6 +218,25 @@ spec:
             value: "{{`{{inputs.parameters.policy-batch-size}}`}}"
           - name: CRITIC_BATCH_SIZE
             value: "{{`{{inputs.parameters.critic-batch-size}}`}}"
+          {{- if .Values.kuberay.enabled }}
+          # KubeRay mode: launch-cabalsh.sh announces this worker's shmem ID
+          # (=$POD_NAME) to the colocated rl-bridge DaemonSet pod over the
+          # UDS at $KUBERAY_BRIDGE_UDS, then runs the UE binary with
+          # -KubeRayCommunicator -ShmemId=$POD_NAME so the C++ shim routes
+          # policy + experience through /dev/shm instead of a TCP socket.
+          - name: KUBERAY_MODE
+            value: "1"
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: KUBERAY_BRIDGE_UDS
+            value: {{ .Values.kuberay.bridgeUds | quote }}
+          {{- end }}
         # The Unreal binary writes runtime state under /project/Saved, but
         # /project itself is owned by root in the image and ue4 (UID 1000)
         # has no write access there. An emptyDir mounted at /project/Saved
@@ -215,6 +245,18 @@ spec:
         volumeMounts:
           - name: project-saved
             mountPath: /project/Saved
+          {{- if .Values.kuberay.enabled }}
+          # /dev/shm is shared with the local rl-bridge DaemonSet pod via
+          # hostPath so UE's MakeSharedMemoryTrainingProcess and the
+          # bridge's Python SharedMemoryCommunicator both attach to the
+          # same POSIX shmem segment named KubeRayShmemId.
+          - name: shm
+            mountPath: /dev/shm
+          # The bridge's UDS lives here; launch-cabalsh.sh writes its
+          # one-shot register message into it on startup.
+          - name: bridge-control
+            mountPath: {{ .Values.kuberay.bridgeStateDir | quote }}
+          {{- end }}
         resources:
           requests:
 {{ toYaml .Values.resources.worker.requests | indent 12 }}
@@ -223,3 +265,13 @@ spec:
       volumes:
         - name: project-saved
           emptyDir: {}
+        {{- if .Values.kuberay.enabled }}
+        - name: shm
+          hostPath:
+            path: /dev/shm
+            type: Directory
+        - name: bridge-control
+          hostPath:
+            path: {{ .Values.kuberay.bridgeStateDir | quote }}
+            type: DirectoryOrCreate
+        {{- end }}
