@@ -27,7 +27,7 @@ images:
   worker:
     repository: agi-rl-rl-worker
     # Default tag is overridden at run time by trigger.py via Workflow parameters.
-    tag: latest
+    tag: kuberay-dev
     pullPolicy: IfNotPresent
     # Argo's emissary executor refuses to start a container without an explicit
     # command — it tries to fetch it from the registry, which fails for images
@@ -36,7 +36,7 @@ images:
     args: ["/project/launch-cabalsh.sh"]
   trainer:
     repository: agi-rl-rl-trainer
-    tag: latest
+    tag: kuberay-dev
     pullPolicy: IfNotPresent
     command: ["bash"]
     args: ["/project/launch-trainer.sh"]
@@ -53,7 +53,7 @@ mlflow:
 # between the worker and the trainer pod's IP (CABAL_TRAINER_IP /
 # tasks.trainer.ip) is used unchanged.
 kuberay:
-  enabled: false
+  enabled: true
   # Long-lived RayCluster head Service. Matches the rl-bridge App in the
   # base repo.
   rayAddress: rl-head-head-svc.experiments.svc.cluster.local:6379
