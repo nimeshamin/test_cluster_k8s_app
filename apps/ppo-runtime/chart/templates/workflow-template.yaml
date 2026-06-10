@@ -148,7 +148,7 @@ spec:
           - name: KUBERAY_MODE
             value: "1"
           - name: RAY_ADDRESS
-            value: {{ .Values.kuberay.rayAddress | quote }}
+            value: "ray://{{ .Values.kuberay.rayAddress | replace ":6379" ":10001" }}"
           - name: BRIDGE_RAY_NAMESPACE
             value: {{ .Values.kuberay.rayNamespace | quote }}
           {{- end }}
