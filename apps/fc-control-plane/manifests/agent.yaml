@@ -1,0 +1,68 @@
+# fc-agent: one per Firecracker node (firecracker=true, the GKE nested-virt
+# pool). Runs VMs with the jailer using the binaries, kernel and rootfs that
+# firecracker-host (test_cluster_k8s_base) stages in /var/lib/firecracker, and
+# waits for that staging before syncing.
+#
+# VMs run inside this pod: restarting or upgrading it reboots the node's VMs.
+# Their disks persist under /var/lib/firecracker/vms.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fc-agent
+  labels:
+    app.kubernetes.io/name: fc-agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fc-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fc-agent
+    spec:
+      # GHCR packages from the private test_control_plane repo. Created out of
+      # band (never committed): see apps/fc-control-plane/README.md.
+      imagePullSecrets:
+        - name: ghcr-pull
+      nodeSelector:
+        firecracker: "true"
+      tolerations:
+        - key: firecracker
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      # Time for guests to shut down on SendCtrlAltDel.
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: fc-agent
+          image: fc-agent
+          env:
+            - name: FC_API_URL
+              value: http://fc-api.fc-system.svc.cluster.local:8080
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: FC_ROOT
+              value: /var/lib/firecracker
+          securityContext:
+            # The jailer needs mknod, chroot, pivot_root and setuid.
+            privileged: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: firecracker-root
+              mountPath: /var/lib/firecracker
+            - name: kvm
+              mountPath: /dev/kvm
+      volumes:
+        - name: firecracker-root
+          hostPath:
+            path: /var/lib/firecracker
+            type: DirectoryOrCreate
+        - name: kvm
+          hostPath:
+            path: /dev/kvm
+            type: CharDevice

@@ -1,0 +1,91 @@
+# fc-api: the control plane API server and scheduler. One replica with its
+# bbolt state on a PVC (ReadWriteOnce), hence the Recreate strategy.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fc-api-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fc-api
+  labels:
+    app.kubernetes.io/name: fc-api
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fc-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fc-api
+    spec:
+      # GHCR packages from the private test_control_plane repo. Created out of
+      # band (never committed): see apps/fc-control-plane/README.md.
+      imagePullSecrets:
+        - name: ghcr-pull
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+      containers:
+        - name: fc-api
+          image: fc-api
+          env:
+            - name: FC_API_LISTEN
+              value: ":8080"
+            - name: FC_API_DB
+              value: /data/fc-api.db
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: fc-api-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fc-api
+  labels:
+    app.kubernetes.io/name: fc-api
+spec:
+  selector:
+    app.kubernetes.io/name: fc-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

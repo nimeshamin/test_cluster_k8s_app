@@ -2,7 +2,16 @@
 
 GitOps application-services repository consumed by Argo CD (bootstrapped from [`test_cluster_infra`](https://github.com/nimeshamin/test_cluster_infra)). Sits on top of [`test_cluster_k8s_base`](https://github.com/nimeshamin/test_cluster_k8s_base), which owns Kubeflow Pipelines, MLflow, and the observability stack this repo's workloads depend on.
 
-> **`firecracker` branch.** No environment deploys anything yet: `ppo-runtime` depends on Kubeflow Pipelines and KubeRay, which the slim base variant on this branch drops. The root Argo CD Applications sync with `allowEmpty`, so this is expected. The Firecracker control plane will be added here once the Firecracker host in `test_cluster_k8s_base` is verified.
+> **`firecracker` branch.** `ppo-runtime` is not deployed here: it depends on Kubeflow Pipelines and KubeRay, which the slim base variant on this branch drops. The root Argo CD Applications sync with `allowEmpty`, so an empty environment is expected.
+
+## Firecracker control plane (`firecracker` branch)
+
+`apps/fc-control-plane/` deploys the control plane from [`test_control_plane`](https://github.com/nimeshamin/test_control_plane) into namespace `fc-system`:
+
+- `fc-api` Deployment (1 replica, `Recreate`) + ClusterIP Service on port 8080, with its bbolt state on a 1Gi PVC.
+- `fc-agent` DaemonSet on `firecracker=true` nodes, privileged, sharing `/var/lib/firecracker` and `/dev/kvm` with `firecracker-host` from `test_cluster_k8s_base`.
+
+Image tags are pinned in `apps/fc-control-plane/manifests/kustomization.yaml`; bump both together. Firecracker processes run inside the `fc-agent` pod, so VM memory is charged to that pod: it deliberately has no memory limit, and restarting it reboots the node's VMs. It is listed in `environments/gcp` only. The images are private GHCR packages pulled with the out-of-band `ghcr-pull` secret; see `apps/fc-control-plane/README.md`.
 
 ## Apps shipped here
 

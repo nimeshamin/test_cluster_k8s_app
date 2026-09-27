@@ -1,6 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# firecracker branch: no application services yet. ppo-runtime is main-only
-# (it needs KFP/KubeRay, which the slim base variant drops). The Firecracker
-# control plane will be added here once the host is verified.
-resources: []
+# firecracker branch: the Firecracker control plane only. ppo-runtime is main-only
+# (it needs KFP/KubeRay, which the slim base variant drops).
+resources:
+  # Needs the out-of-band ghcr-pull secret in fc-system (apps/fc-control-plane/README.md).
+  - ../../apps/fc-control-plane/application.yaml
