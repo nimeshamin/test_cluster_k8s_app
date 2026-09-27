@@ -13,7 +13,7 @@ spec:
   project: bootstrap
   source:
     repoURL: https://github.com/nimeshamin/test_cluster_k8s_app.git
-    targetRevision: main
+    targetRevision: firecracker
     path: apps/ppo-runtime/chart
     helm:
       releaseName: ppo-runtime

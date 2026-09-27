@@ -2,6 +2,8 @@
 
 GitOps application-services repository consumed by Argo CD (bootstrapped from [`test_cluster_infra`](https://github.com/nimeshamin/test_cluster_infra)). Sits on top of [`test_cluster_k8s_base`](https://github.com/nimeshamin/test_cluster_k8s_base), which owns Kubeflow Pipelines, MLflow, and the observability stack this repo's workloads depend on.
 
+> **`firecracker` branch.** No environment deploys anything yet: `ppo-runtime` depends on Kubeflow Pipelines and KubeRay, which the slim base variant on this branch drops. The root Argo CD Applications sync with `allowEmpty`, so this is expected. The Firecracker control plane will be added here once the Firecracker host in `test_cluster_k8s_base` is verified.
+
 ## Apps shipped here
 
 | App | Path | Description |
