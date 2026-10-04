@@ -3,6 +3,11 @@
 # firecracker-host (test_cluster_k8s_base) stages in /var/lib/firecracker, and
 # waits for that staging before syncing.
 #
+# /var/lib/firecracker is the reflink-capable XFS store that firecracker-host
+# mounts; HostToContainer propagation lets this pod see that mount even if it
+# starts first. Each VM's disk (vms/<id>/rootfs.ext4) is a reflink clone of a
+# read-only base image in images/<name>/, removed when the VM is deleted.
+#
 # VMs run inside this pod: restarting or upgrading it reboots the node's VMs.
 # Their disks persist under /var/lib/firecracker/vms.
 apiVersion: apps/v1
@@ -33,6 +38,22 @@ spec:
           effect: NoSchedule
       # Time for guests to shut down on SendCtrlAltDel.
       terminationGracePeriodSeconds: 30
+      initContainers:
+        # Copies the base images baked into fc-images (e.g. node24) into the
+        # node's image cache, replacing one only when its sha256 changes.
+        - name: sync-images
+          image: fc-images
+          env:
+            - name: FC_ROOT
+              value: /var/lib/firecracker
+          volumeMounts:
+            - name: firecracker-root
+              mountPath: /var/lib/firecracker
+              mountPropagation: HostToContainer
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
       containers:
         - name: fc-agent
           image: fc-agent
@@ -55,6 +76,7 @@ spec:
           volumeMounts:
             - name: firecracker-root
               mountPath: /var/lib/firecracker
+              mountPropagation: HostToContainer
             - name: kvm
               mountPath: /dev/kvm
       volumes:

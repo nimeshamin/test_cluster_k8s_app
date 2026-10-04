@@ -7,11 +7,14 @@ resources:
 labels:
   - pairs:
       app.kubernetes.io/part-of: fc-control-plane
-# Built by test_control_plane's images workflow. Bump both tags together.
+# Built by test_control_plane's images workflow. Bump all tags together.
 images:
   - name: fc-api
     newName: ghcr.io/nimeshamin/test-control-plane/fc-api
-    newTag: "0.1.0"
+    newTag: "0.2.0"
   - name: fc-agent
     newName: ghcr.io/nimeshamin/test-control-plane/fc-agent
-    newTag: "0.1.0"
+    newTag: "0.2.0"
+  - name: fc-images
+    newName: ghcr.io/nimeshamin/test-control-plane/fc-images
+    newTag: "0.2.0"
