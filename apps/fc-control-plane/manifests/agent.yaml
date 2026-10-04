@@ -7,6 +7,8 @@
 # mounts; HostToContainer propagation lets this pod see that mount even if it
 # starts first. Each VM's disk (vms/<id>/rootfs.ext4) is a reflink clone of a
 # read-only base image in images/<name>/, removed when the VM is deleted.
+# Images the node lacks are pulled from fc-images on demand; pulled images
+# unused for FC_IMAGE_TTL are removed.
 #
 # VMs run inside this pod: restarting or upgrading it reboots the node's VMs.
 # Their disks persist under /var/lib/firecracker/vms.
@@ -38,22 +40,6 @@ spec:
           effect: NoSchedule
       # Time for guests to shut down on SendCtrlAltDel.
       terminationGracePeriodSeconds: 30
-      initContainers:
-        # Copies the base images baked into fc-images (e.g. node24) into the
-        # node's image cache, replacing one only when its sha256 changes.
-        - name: sync-images
-          image: fc-images
-          env:
-            - name: FC_ROOT
-              value: /var/lib/firecracker
-          volumeMounts:
-            - name: firecracker-root
-              mountPath: /var/lib/firecracker
-              mountPropagation: HostToContainer
-          resources:
-            requests:
-              cpu: 100m
-              memory: 64Mi
       containers:
         - name: fc-agent
           image: fc-agent
@@ -66,6 +52,10 @@ spec:
                   fieldPath: spec.nodeName
             - name: FC_ROOT
               value: /var/lib/firecracker
+            - name: FC_IMAGE_SERVER_URL
+              value: http://fc-images.fc-system.svc.cluster.local:8080
+            - name: FC_IMAGE_TTL
+              value: 1h
           securityContext:
             # The jailer needs mknod, chroot, pivot_root and setuid.
             privileged: true

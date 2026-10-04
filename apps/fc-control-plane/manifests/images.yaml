@@ -1,0 +1,59 @@
+# fc-images: fc-image-server serving the base images baked into the image
+# (e.g. node24). Agents pull an image from it only when a VM on their node
+# needs it; fc-api reads its catalogue to validate and schedule images.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fc-images
+  labels:
+    app.kubernetes.io/name: fc-images
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fc-images
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fc-images
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      containers:
+        - name: fc-images
+          image: fc-images
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fc-images
+  labels:
+    app.kubernetes.io/name: fc-images
+spec:
+  selector:
+    app.kubernetes.io/name: fc-images
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

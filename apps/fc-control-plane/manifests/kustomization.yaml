@@ -4,6 +4,7 @@ namespace: fc-system
 resources:
   - api.yaml
   - agent.yaml
+  - images.yaml
 labels:
   - pairs:
       app.kubernetes.io/part-of: fc-control-plane
@@ -11,10 +12,10 @@ labels:
 images:
   - name: fc-api
     newName: ghcr.io/nimeshamin/test-control-plane/fc-api
-    newTag: "0.2.1"
+    newTag: "0.3.0"
   - name: fc-agent
     newName: ghcr.io/nimeshamin/test-control-plane/fc-agent
-    newTag: "0.2.1"
+    newTag: "0.3.0"
   - name: fc-images
     newName: ghcr.io/nimeshamin/test-control-plane/fc-images
-    newTag: "0.2.1"
+    newTag: "0.3.0"

@@ -9,7 +9,7 @@ GitOps application-services repository consumed by Argo CD (bootstrapped from [`
 `apps/fc-control-plane/` deploys the control plane from [`test_control_plane`](https://github.com/nimeshamin/test_control_plane) into namespace `fc-system`:
 
 - `fc-api` Deployment (1 replica, `Recreate`) + ClusterIP Service on port 8080, with its bbolt state on a 1Gi PVC.
-- `fc-agent` DaemonSet on `firecracker=true` nodes, privileged, sharing `/var/lib/firecracker` (the XFS reflink store, with `HostToContainer` mount propagation) and `/dev/kvm` with `firecracker-host` from `test_cluster_k8s_base`. Its `sync-images` init container (`fc-images`) copies base images such as `node24` into the node's image cache.
+- `fc-agent` DaemonSet on `firecracker=true` nodes, privileged, sharing `/var/lib/firecracker` (the XFS reflink store, with `HostToContainer` mount propagation) and `/dev/kvm` with `firecracker-host` from `test_cluster_k8s_base`. It pulls base images such as `node24` on demand from the `fc-images` Deployment (`fc-image-server`), and removes pulled images unused for an hour.
 
 Image tags are pinned in `apps/fc-control-plane/manifests/kustomization.yaml`; bump both together. Firecracker processes run inside the `fc-agent` pod, so VM memory is charged to that pod: it deliberately has no memory limit, and restarting it reboots the node's VMs. It is listed in `environments/gcp` only. The images are private GHCR packages pulled with the out-of-band `ghcr-pull` secret; see `apps/fc-control-plane/README.md`.
 
