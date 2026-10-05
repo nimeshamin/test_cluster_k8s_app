@@ -59,6 +59,12 @@ spec:
               value: 1h
             - name: FC_API_TOKEN_FILE
               value: /var/run/secrets/fc-api/token
+            # Per-VM cgroups are required; the agent refuses to run VMs
+            # without them. io.max per VM on the image store device.
+            - name: FC_CGROUPS
+              value: required
+            - name: FC_VM_IO_MAX
+              value: rbps=268435456 wbps=268435456 riops=8000 wiops=8000
           securityContext:
             # The jailer needs mknod, chroot, pivot_root and setuid.
             privileged: true
