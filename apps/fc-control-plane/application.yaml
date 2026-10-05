@@ -23,3 +23,9 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+    # fc-agent is privileged (jailer, /dev/kvm); say so explicitly rather than
+    # inheriting the cluster default.
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: privileged
+        pod-security.kubernetes.io/warn: privileged

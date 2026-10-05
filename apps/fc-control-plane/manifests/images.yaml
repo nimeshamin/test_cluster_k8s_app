@@ -17,6 +17,7 @@ spec:
       labels:
         app.kubernetes.io/name: fc-images
     spec:
+      serviceAccountName: fc-images
       imagePullSecrets:
         - name: ghcr-pull
       securityContext:

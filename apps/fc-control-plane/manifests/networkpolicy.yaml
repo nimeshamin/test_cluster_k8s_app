@@ -1,0 +1,54 @@
+# Ingress in fc-system is denied by default. fc-api accepts the agents and
+# pods labelled fc.nimeshamin.dev/api-client=true in any namespace (the front
+# service); fc-images accepts only agents and fc-api. Requests still need a
+# valid token: these policies are defence in depth, not the authentication.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fc-api-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: fc-api
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: fc-agent
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              fc.nimeshamin.dev/api-client: "true"
+      ports:
+        - port: 8080
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fc-images-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: fc-images
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: fc-agent
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: fc-api
+      ports:
+        - port: 8080
+          protocol: TCP

@@ -1,0 +1,46 @@
+# Identities. Callers of fc-api authenticate with service account tokens for
+# the audience "fc-api", which fc-api verifies with the TokenReview API.
+#
+#   fc-frontend  the tenant-facing front service's identity: may use the VM,
+#                node and image APIs. The real front service can run as this
+#                account or be added to FC_CLIENT_PRINCIPALS on fc-api. It has
+#                no Kubernetes permissions.
+#   fc-agent     node agents: may only call /v1/agent/sync, as their own node
+#                (the token is bound to the agent pod and so to its node).
+#   fc-api       verifies tokens (system:auth-delegator).
+#   fc-images    no Kubernetes permissions.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fc-api
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fc-agent
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fc-frontend
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fc-images
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fc-api-tokenreview
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: fc-api
+    namespace: fc-system

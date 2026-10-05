@@ -28,6 +28,7 @@ spec:
       labels:
         app.kubernetes.io/name: fc-api
     spec:
+      serviceAccountName: fc-api
       # GHCR packages from the private test_control_plane repo. Created out of
       # band (never committed): see apps/fc-control-plane/README.md.
       imagePullSecrets:
@@ -47,6 +48,14 @@ spec:
               value: /data/fc-api.db
             - name: FC_IMAGE_SERVER_URL
               value: http://fc-images.fc-system.svc.cluster.local:8080
+            - name: FC_AUTH
+              value: tokenreview
+            - name: FC_API_AUDIENCE
+              value: fc-api
+            - name: FC_CLIENT_PRINCIPALS
+              value: system:serviceaccount:fc-system:fc-frontend
+            - name: FC_AGENT_PRINCIPALS
+              value: system:serviceaccount:fc-system:fc-agent
           ports:
             - name: http
               containerPort: 8080

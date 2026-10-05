@@ -31,6 +31,7 @@ spec:
       # band (never committed): see apps/fc-control-plane/README.md.
       imagePullSecrets:
         - name: ghcr-pull
+      serviceAccountName: fc-agent
       nodeSelector:
         firecracker: "true"
       tolerations:
@@ -56,6 +57,8 @@ spec:
               value: http://fc-images.fc-system.svc.cluster.local:8080
             - name: FC_IMAGE_TTL
               value: 1h
+            - name: FC_API_TOKEN_FILE
+              value: /var/run/secrets/fc-api/token
           securityContext:
             # The jailer needs mknod, chroot, pivot_root and setuid.
             privileged: true
@@ -69,6 +72,9 @@ spec:
               mountPropagation: HostToContainer
             - name: kvm
               mountPath: /dev/kvm
+            - name: fc-api-token
+              mountPath: /var/run/secrets/fc-api
+              readOnly: true
       volumes:
         - name: firecracker-root
           hostPath:
@@ -78,3 +84,12 @@ spec:
           hostPath:
             path: /dev/kvm
             type: CharDevice
+        # Token for fc-api, bound to this pod (and so to this node), rotated
+        # by the kubelet.
+        - name: fc-api-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: fc-api
+                  expirationSeconds: 3600
+                  path: token

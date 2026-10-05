@@ -2,6 +2,8 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: fc-system
 resources:
+  - rbac.yaml
+  - networkpolicy.yaml
   - api.yaml
   - agent.yaml
   - images.yaml
@@ -12,10 +14,10 @@ labels:
 images:
   - name: fc-api
     newName: ghcr.io/nimeshamin/test-control-plane/fc-api
-    newTag: "0.3.0"
+    newTag: "0.4.0"
   - name: fc-agent
     newName: ghcr.io/nimeshamin/test-control-plane/fc-agent
-    newTag: "0.3.0"
+    newTag: "0.4.0"
   - name: fc-images
     newName: ghcr.io/nimeshamin/test-control-plane/fc-images
-    newTag: "0.3.0"
+    newTag: "0.4.0"
