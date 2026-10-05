@@ -56,6 +56,17 @@ spec:
               value: system:serviceaccount:fc-system:fc-frontend
             - name: FC_AGENT_PRINCIPALS
               value: system:serviceaccount:fc-system:fc-agent
+            # Default per-tenant hard limits; per-tenant overrides go in
+            # FC_TENANT_LIMITS as JSON. The front service enforces finer
+            # user-facing quotas; these are the control plane's backstop.
+            - name: FC_TENANT_MAX_VMS
+              value: "20"
+            - name: FC_TENANT_MAX_VCPUS
+              value: "16"
+            - name: FC_TENANT_MAX_MEMORY_MIB
+              value: "16384"
+            - name: FC_TENANT_MAX_DISK_GIB
+              value: "50"
           ports:
             - name: http
               containerPort: 8080
