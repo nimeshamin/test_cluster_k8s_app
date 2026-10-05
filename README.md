@@ -11,6 +11,8 @@ GitOps application-services repository consumed by Argo CD (bootstrapped from [`
 - `fc-api` Deployment (1 replica, `Recreate`) + ClusterIP Service on port 8080, with its bbolt state on a 1Gi PVC.
 - `fc-agent` DaemonSet on `firecracker=true` nodes, privileged, sharing `/var/lib/firecracker` (the XFS reflink store, with `HostToContainer` mount propagation) and `/dev/kvm` with `firecracker-host` from `test_cluster_k8s_base`. It pulls base images such as `node24` on demand from the `fc-images` Deployment (`fc-image-server`), and removes pulled images unused for an hour.
 
+**Calling fc-api.** The tenant-facing front service runs in this cluster as service account `fc-system/fc-frontend` (or another account added to `FC_CLIENT_PRINCIPALS`), with its pods labelled `fc.nimeshamin.dev/api-client: "true"` (NetworkPolicy), and sends a projected token for audience `fc-api` plus `X-Tenant` on every call. Per-tenant limits default to 20 VMs / 16 vCPUs / 16 GiB / 50 GiB (`FC_TENANT_MAX_*` on fc-api; overrides in `FC_TENANT_LIMITS`). Ingress to everything in `fc-system` is otherwise denied.
+
 Image tags are pinned in `apps/fc-control-plane/manifests/kustomization.yaml`; bump both together. Firecracker processes run inside the `fc-agent` pod, so VM memory is charged to that pod: it deliberately has no memory limit, and restarting it reboots the node's VMs. It is listed in `environments/gcp` only. The images are private GHCR packages pulled with the out-of-band `ghcr-pull` secret; see `apps/fc-control-plane/README.md`.
 
 ## Apps shipped here
