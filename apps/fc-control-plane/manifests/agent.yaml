@@ -65,6 +65,10 @@ spec:
               value: required
             - name: FC_VM_IO_MAX
               value: rbps=268435456 wbps=268435456 riops=8000 wiops=8000
+            # Per-VM network namespaces: outbound internet only; private,
+            # cluster and link-local ranges and other VMs are unreachable.
+            - name: FC_NETWORK
+              value: "on"
           securityContext:
             # The jailer needs mknod, chroot, pivot_root and setuid.
             privileged: true
