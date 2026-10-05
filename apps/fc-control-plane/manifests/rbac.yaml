@@ -7,7 +7,8 @@
 #                no Kubernetes permissions.
 #   fc-agent     node agents: may only call /v1/agent/sync, as their own node
 #                (the token is bound to the agent pod and so to its node).
-#   fc-api       verifies tokens (system:auth-delegator).
+#   fc-api       verifies tokens (system:auth-delegator) and reads node labels
+#                to find nodes dedicated to a tenant.
 #   fc-images    no Kubernetes permissions.
 apiVersion: v1
 kind: ServiceAccount
@@ -40,6 +41,28 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: fc-api
+    namespace: fc-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fc-api-node-reader
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fc-api-node-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fc-api-node-reader
 subjects:
   - kind: ServiceAccount
     name: fc-api
